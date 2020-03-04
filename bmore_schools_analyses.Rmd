@@ -1,0 +1,45 @@
+---
+title: "Baltimore Schools Report Card Analyses"
+author: "Nathaniel A. Dewey"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r}
+rm(list=ls())
+
+library(tidyverse)
+library(summarytools)
+library(stargazer)
+
+# load data
+load(file="data/analytic.RData")
+
+analytic <- analytic %>% mutate_at(vars(-schid, -schname, -star_rating, -points_earned), function(col_vec) {
+  as.numeric(recode(col_vec, "<= 5.0" = "2.5", "< 5.0" = "2.5", ">= 95.0" = "97.5", "> 95.0" = "97.5"))
+})
+```
+
+
+```{r}
+with(analytic, cor(points_earned, farms_per))
+```
+
+```{r}
+with(analytic, lm(points_earned ~ farms_per))
+```
+
+```{r}
+with(analytic, stby(farms_per, star_rating, descr))
+```
+
+```{r}
+analytic %>%
+  mutate(
+    star_rating2 = ifelse(star_rating == 1, 100, star_rating),
+    star_rating3 = dplyr::recode(star_rating, `1` = 100, .default = as.double(star_rating))
+  ) %>% select(star_rating, star_rating2, star_rating3)
+```
+

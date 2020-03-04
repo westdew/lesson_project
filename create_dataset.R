@@ -52,13 +52,54 @@ mdse_special_services <- read.csvX("source/Special_Services_2019.csv", stringsAs
 ### Munge source datasets
 
 ## Report card (canonical)
+mdse_report_card <- mdse_report_card %>%
+  rename(schid = School.Number, schname = School.Name, star_rating = Star.Rating, points_earned=Total.Points.Earned.Percentage) %>%
+  filter(LSS.Number == 30) %>% # Baltimore City
+  select(schid, schname, star_rating, points_earned)
 
 ## Attendance
-  
+
+mdse_attendance <- mdse_attendance %>%
+  rename(schid = School.Number, chronic_absentee_pct = Chronic.Absentee.Pct) %>%
+  filter(LSS.Number == 30, schid != "A") %>% # Baltimore City
+  mutate(schid = as.integer(schid))
+
+schids_with_nonstandard_gradebands <- filter(mdse_attendance, School.Type == "All Students") %>% pull(schid)
+
+mdse_attendance <- mdse_attendance %>%
+  filter(
+    !(schid %in% schids_with_nonstandard_gradebands) | School.Type == "All Students"
+  ) %>% select(schid, chronic_absentee_pct)
+
 ## MCAP
+
+mdse_mcap <- mdse_mcap %>%
+  rename(schid = School.Number) %>%
+  filter(LSS.Number == 30, schid != "A") %>% # Baltimore City
+  select(schid, Assessment, Proficient.Pct) %>%
+  mutate(schid = as.integer(schid)) %>%
+  pivot_wider(schid, names_from=Assessment, values_from=Proficient.Pct)
 
 ## Special Services
 
+mdse_special_services <- mdse_special_services %>%
+  rename(schid = School.Number, farms_per = FARMS.Pct) %>%
+  filter(LSS.Number == 30, schid != "A") %>% # Baltimore City
+  mutate(schid = as.integer(schid))
+
+schids_with_nonstandard_gradebands <- filter(mdse_special_services, School.Type == "All") %>% pull(schid)
+  
+mdse_special_services <- mdse_special_services %>%
+  filter(
+    !(schid %in% schids_with_nonstandard_gradebands) | School.Type == "All"
+  ) %>% select(schid, farms_per)
+
 ### Merge source datasets into final dataset
 
+analytic <- mdse_report_card %>%
+  left_join(mdse_mcap, by="schid") %>%
+  left_join(mdse_attendance, by="schid") %>%
+  left_join(mdse_special_services, by="schid")
+
 ### Save final dataset
+save(analytic, file="data/analytic.RData")
