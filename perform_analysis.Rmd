@@ -1,0 +1,89 @@
+---
+title: "Baltimore High Schools Analysis"
+author: "Nathaniel A. Dewey"
+output:
+  html_notebook:
+    code_folding: hide
+---
+
+```{r}
+rm(list=ls())
+
+library(tidyverse)
+library(summarytools)
+library(stargazer)
+
+# load data
+load(file="data/analytic.RData")
+
+analytic <- analytic %>% mutate_at(vars(-schid, -schname, -schtype, -star_rating, -points_earned), function(x) {
+  x %>%
+    ifelse(
+      . == "<= 5.0",
+      round(runif(nrow(analytic), 0, 5), 1),
+      .
+      ) %>%
+    ifelse(
+      . == ">= 95.0",
+      round(runif(nrow(analytic), 95, 100), 1),
+      .
+      ) %>%
+    as.numeric
+})
+```
+
+## Analytics
+
+### Descriptive Statistics
+
+```{r}
+with(analytic, descr(points_earned))
+```
+
+### Frequency Table
+
+```{r}
+with(analytic, freq(star_rating))
+```
+
+
+### Contingency Table
+
+```{r}
+with(analytic, ctable(star_rating, schtype, prop="c"))
+```
+
+### Correlation Table
+
+```{r}
+with(analytic, cor(select(analytic, farms_per, chronic_absentee_pct, mcap_algebra_proficient_pct, mcap_ela10_proficient_pct)))
+```
+
+### Linear Regression
+
+```{r}
+fit_lr <- lm(points_earned ~ farms_per, data=analytic)
+
+summary(fit_lr)
+```
+
+### Multiple Regression
+
+```{r}
+fit_mr <- lm(farms_per ~ mcap_algebra_proficient_pct + mcap_ela10_proficient_pct, data=analytic)
+
+summary(fit_mr)
+```
+
+### Regression Tables
+
+```{r}
+fit_model_1 <- lm(farms_per ~ chronic_absentee_pct + mcap_algebra_proficient_pct, data=analytic)
+fit_model_2 <- lm(farms_per ~ chronic_absentee_pct + mcap_ela10_proficient_pct, data=analytic)
+fit_model_3 <- lm(farms_per ~ chronic_absentee_pct + mcap_algebra_proficient_pct + mcap_ela10_proficient_pct, data=analytic)
+
+suppressWarnings(
+  stargazer(fit_model_1, fit_model_2, fit_model_3, type="text")
+)
+```
+

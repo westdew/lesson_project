@@ -9,6 +9,7 @@
 rm(list=ls())
 
 library(tidyverse)
+library(readxl)
 
 ### Define Functions
 
@@ -31,6 +32,7 @@ read.csvX = function(file, encoding="UTF-16LE", sep=",", header=T, stringsAsFact
 
 ### Import source datasets
 
+mdse_schools <- read_excel("source/School_Directory_2019.xlsx", sheet="School_Directory_2019")
 mdse_report_card <- read.csvX("source/2019_Accountability_Schools.csv", sep="\t", stringsAsFactors=F)
 mdse_attendance <- read.csvX("source/Attendance_2019.csv", stringsAsFactors=F)
 mdse_mcap <- read.csvX("source/MCAP_ELA_MATH_2019.csv", stringsAsFactors=F) # long on test subject and grade level
@@ -41,65 +43,82 @@ mdse_special_services <- read.csvX("source/Special_Services_2019.csv", stringsAs
 # Variables:
 # - schid (int)
 # - schname (chr)
+# - schtype (chr)
 # - chronic_absentee_pct (num)
-# - mcap_ela_proficient_pct (num)
-# - mcap_math_proficient_pct (num)
+# - mcap_ela10_proficient_pct (num)
+# - mcap_algebra_proficient_pct (num)
 # - star_rating (int)
 # - points_earned (int)
 # - farms_per (num)
-# Observations: High schools in Baltimore City with traditional management
+# Observations: High schools in Baltimore City (not special education or alternative schools)
 
 ### Munge source datasets
 
-## Report card (canonical)
+## School Directory (canonical)
+
+mdse_schools <- mdse_schools %>%
+  rename(schid = `School Number`, schname = `School Name`, schtype = `School Type`) %>%
+  filter(
+    `LSS Number` == 30, # Baltimore City
+    schtype %in% c("H", "MH", "EMH") # high school
+  ) %>% 
+  mutate(schid = as.integer(schid)) %>%
+  select(schid, schname, schtype)
+
+## Report card
+
 mdse_report_card <- mdse_report_card %>%
-  rename(schid = School.Number, schname = School.Name, star_rating = Star.Rating, points_earned=Total.Points.Earned.Percentage) %>%
+  rename(schid = School.Number, star_rating = Star.Rating, points_earned=Total.Points.Earned.Percentage) %>%
   filter(LSS.Number == 30) %>% # Baltimore City
-  select(schid, schname, star_rating, points_earned)
+  select(schid, star_rating, points_earned)
 
 ## Attendance
 
 mdse_attendance <- mdse_attendance %>%
   rename(schid = School.Number, chronic_absentee_pct = Chronic.Absentee.Pct) %>%
-  filter(LSS.Number == 30, schid != "A") %>% # Baltimore City
-  mutate(schid = as.integer(schid))
-
-schids_with_nonstandard_gradebands <- filter(mdse_attendance, School.Type == "All Students") %>% pull(schid)
-
-mdse_attendance <- mdse_attendance %>%
   filter(
-    !(schid %in% schids_with_nonstandard_gradebands) | School.Type == "All Students"
-  ) %>% select(schid, chronic_absentee_pct)
+    LSS.Number == 30, # Baltimore City
+    schid != "A", # not aggregate
+    School.Type == "High" # high school
+  ) %>% 
+  mutate(schid = as.integer(schid)) %>%
+  select(schid, chronic_absentee_pct)
 
 ## MCAP
 
 mdse_mcap <- mdse_mcap %>%
   rename(schid = School.Number) %>%
-  filter(LSS.Number == 30, schid != "A") %>% # Baltimore City
+  filter(
+    LSS.Number == 30, # Baltimore City
+    schid != "A", # not aggregate
+    Assessment == "Algebra 1" | Assessment == "English/Language Arts Grade 10" # only include high school tests
+  ) %>%
   select(schid, Assessment, Proficient.Pct) %>%
   mutate(schid = as.integer(schid)) %>%
-  pivot_wider(schid, names_from=Assessment, values_from=Proficient.Pct)
+  pivot_wider(schid, names_from=Assessment, values_from=Proficient.Pct) %>%
+  rename(mcap_algebra_proficient_pct = "Algebra 1", mcap_ela10_proficient_pct = "English/Language Arts Grade 10")
 
 ## Special Services
 
 mdse_special_services <- mdse_special_services %>%
   rename(schid = School.Number, farms_per = FARMS.Pct) %>%
-  filter(LSS.Number == 30, schid != "A") %>% # Baltimore City
-  mutate(schid = as.integer(schid))
-
-schids_with_nonstandard_gradebands <- filter(mdse_special_services, School.Type == "All") %>% pull(schid)
-  
-mdse_special_services <- mdse_special_services %>%
   filter(
-    !(schid %in% schids_with_nonstandard_gradebands) | School.Type == "All"
-  ) %>% select(schid, farms_per)
+    LSS.Number == 30, # Baltimore City
+    schid != "A", # not aggregate
+    School.Type == "High" # high school
+  ) %>%
+  mutate(schid = as.integer(schid)) %>%
+  select(schid, farms_per)
 
 ### Merge source datasets into final dataset
 
-analytic <- mdse_report_card %>%
+analytic <- mdse_schools %>%
+  left_join(mdse_report_card, by="schid") %>%
   left_join(mdse_mcap, by="schid") %>%
   left_join(mdse_attendance, by="schid") %>%
   left_join(mdse_special_services, by="schid")
+
+analytic <- filter(analytic, !(schid %in% c(177, 301, 307, 884))) # remove special education and alternative schools
 
 ### Save final dataset
 save(analytic, file="data/analytic.RData")
