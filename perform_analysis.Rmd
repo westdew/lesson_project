@@ -142,6 +142,20 @@ ggplot(analytic) +
   geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per), data=function(df) { filter(df, schid %in% c(403, 407, 415, 480)) }, color="red")
 ```
 
+#### Scatter Plot with Jitter
+
+```{r}
+analytic %>%
+  mutate(
+    mcap_ela10_proficient_pct_cut = cut(mcap_ela10_proficient_pct, breaks=c(0, 25, 50, 75, 100), labels=F),
+    farms_per_cut = cut(farms_per, breaks=c(0, 25, 50, 75, 100), labels=F)
+  ) %>%
+  ggplot +
+    geom_jitter(aes(y=(100 - mcap_ela10_proficient_pct_cut), x=farms_per_cut), width=0.1, height=0.1) +
+    labs(y = "% Not Proficient on MCAP ELA", x = "% FARMS") +
+    theme_minimal()
+```
+
 #### Scatter Plot with Linear Regression Fit
 
 ```{r}
