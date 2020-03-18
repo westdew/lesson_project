@@ -9,9 +9,13 @@ output:
 ```{r}
 rm(list=ls())
 
+# install.packages("devtools")
+# devtools::install_github("thomasp85/patchwork")
+
 library(tidyverse)
 library(summarytools)
 library(stargazer)
+library(patchwork)
 
 # load data
 load(file="data/analytic.RData")
@@ -85,5 +89,148 @@ fit_model_3 <- lm(farms_per ~ chronic_absentee_pct + mcap_algebra_proficient_pct
 suppressWarnings(
   stargazer(fit_model_1, fit_model_2, fit_model_3, type="text")
 )
+```
+
+## Visualization
+
+### Univariate Plots {.tabset}
+
+#### Histogram
+
+```{r}
+ggplot(analytic) +
+  geom_histogram(aes(x=mcap_ela10_proficient_pct), bins=20)
+```
+
+#### Density
+
+```{r}
+ggplot(analytic) +
+  geom_density(aes(x=mcap_ela10_proficient_pct))
+```
+
+#### Better Density
+
+```{r}
+analytic %>%
+  pivot_longer(c(mcap_ela10_proficient_pct, mcap_algebra_proficient_pct), names_to="mcap_test", values_to="mcap_proficient_pct") %>%
+  ggplot +
+    geom_line(aes(x=mcap_proficient_pct, color=mcap_test), stat="density")
+```
+
+#### Box Plots
+
+```{r}
+analytic %>%
+  pivot_longer(c(mcap_ela10_proficient_pct, mcap_algebra_proficient_pct), names_to="mcap_test", values_to="mcap_proficient_pct") %>%
+  ggplot +
+    geom_boxplot(aes(x=mcap_test, y=mcap_proficient_pct))
+```
+
+### Multivariate Plots {.tabset}
+
+#### Scatter Plot
+
+```{r}
+ggplot(analytic) +
+  geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per))
+```
+
+```{r}
+ggplot(analytic) +
+  geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per)) +
+  geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per), data=function(df) { filter(df, schid %in% c(403, 407, 415, 480)) }, color="red")
+```
+
+#### Scatter Plot with Linear Regression Fit
+
+```{r}
+ggplot(analytic, aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE)
+```
+
+#### Scatter Plot with Polynomial Fit
+
+```{r}
+ggplot(analytic, aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula=y ~ poly(x, 2), se = TRUE)
+```
+
+#### Scatter Plot with Nonparametric Fit
+
+```{r}
+ggplot(analytic, aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per)) +
+  geom_point() +
+  geom_smooth(method = "loess", se = TRUE)
+```
+
+### Multiples
+
+#### Faceting
+
+```{r}
+ggplot(analytic) +
+  geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per)) +
+  facet_wrap(vars(schtype))
+```
+
+
+```{r}
+ggplot(analytic) +
+  geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per)) +
+  facet_grid(vars(schtype), vars(star_rating))
+```
+
+#### Patchwork
+
+```{r}
+p_H <- analytic %>%
+  filter(schtype == "H") %>%
+  ggplot +
+    geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per))
+
+p_MH <- analytic %>%
+  filter(schtype == "MH") %>%
+  ggplot +
+    geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per))
+
+p_H + p_MH
+```
+
+
+```{r}
+p1 <- ggplot(analytic) +
+  geom_point(aes(y = (100 - mcap_ela10_proficient_pct), x = farms_per)) +
+  scale_x_continuous(position = "top") +
+  labs(x = "% Direct Certification", y = "% Below Proficient on MCAP ELA") +
+  theme_minimal()
+
+p2 <- ggplot(analytic) +
+  geom_area(aes(x = (100 - mcap_ela10_proficient_pct)), stat="density") +
+  coord_flip() +
+  theme_void()
+
+p3 <- ggplot(analytic) +
+  geom_area(aes(x = farms_per), stat="density") +
+  scale_y_reverse() +
+  theme_void()
+  
+(p1 | p2) / (p3 | plot_spacer())
+```
+
+```{r}
+layout <- "
+AAAAAB
+AAAAAB
+AAAAAB
+AAAAAB
+AAAAAB
+CCCCC#
+"
+
+p1 + p2 + p3 +
+  plot_layout(design = layout)
 ```
 
