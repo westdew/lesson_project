@@ -1,0 +1,212 @@
+---
+title: "Simulation"
+output: html_notebook
+---
+
+```{r}
+rm(list=ls())
+
+library(tidyverse)
+library(MASS)
+
+# functions
+constrain <- function(v, minV, maxV) {
+  sapply(v, function(y) min(max(y, minV), maxV))
+}
+
+# load data
+load(file="data/analytic.RData")
+```
+
+# Basics of Nested Simulation
+
+### Generating the identifiers
+
+```{r}
+# calculate N & M
+N <- sum(analytic$enrollment_cnt)
+M <- length(analytic$enrollment_cnt)
+
+# generate student ids
+stid <- 1:N
+
+# generate school ids for students
+schid <- rep(analytic$schid, analytic$enrollment_cnt)
+
+# test
+df <- data.frame(stid, schid)
+```
+
+### Simulating from aggregate parameters
+
+#### Continuous
+
+```{r}
+attend_rate_1 <- rnorm(analytic$enrollment_cnt[1], analytic$attend_rate_pct[1], 15)
+
+summary(attend_rate_1)
+
+attend_rate_1 <- constrain(attend_rate_1, 0, 100)
+
+summary(attend_rate_1)
+```
+
+#### Discrete
+
+```{r}
+farms_1 <- as.integer(runif(analytic$enrollment_cnt[1]) <= analytic$farms_pct[1]/100)
+
+summary(farms_1)
+
+farms_1 <- rbinom(analytic$enrollment_cnt[1], 1, analytic$farms_pct[1]/100)
+
+summary(farms_1)
+```
+
+
+### Simulating from vectors of aggregate parameters
+
+```{r}
+sch_attend_rate <- rep(analytic$attend_rate_pct, analytic$enrollment_cnt)
+
+attend_rate <- sch_attend_rate %>%
+  rnorm(sch_attend_rate, 15) %>% 
+  constrain(0, 100)
+
+summary(attend_rate)
+
+sch_farms_pct <- rep(analytic$farms_pct, analytic$enrollment_cnt)
+
+farms <- rbinom(sch_farms_pct, 1, sch_farms_pct/100)
+
+summary(farms)
+
+# test
+df <- data.frame(stid, schid, attend_rate, farms)
+```
+
+#### Examine aggregates
+
+```{r}
+View(
+  left_join(
+    dplyr::select(analytic, schid, schname, attend_rate_pct, farms_pct),
+    df %>% group_by(schid) %>% summarize(
+      attend_rate_pct_sim = mean(attend_rate),
+      farms_pct_sim = mean(farms)*100
+    ),
+    by="schid"
+  ) %>% dplyr::select(schid, schname, attend_rate_pct, attend_rate_pct_sim, farms_pct, farms_pct_sim)
+)
+```
+
+#### Examine correlation
+
+```{r}
+with(df, cor(attend_rate, farms))
+```
+
+# Parameter Distributions {.tabset}
+
+```{r}
+plot_dist <- function(v, discrete=F) {
+  if (discrete) {
+    data.frame(x = v) %>%
+      ggplot(aes(x = x)) +
+        geom_bar() +
+        theme_minimal()
+  } else {
+    data.frame(x = v) %>%
+      ggplot(aes(x = x)) +
+        geom_line(stat="density") +
+        theme_minimal()
+  }
+}
+```
+
+
+## Uniform
+
+```{r, results="asis"}
+plot_dist(runif(100000, 0, 1))
+```
+
+## Normal
+
+```{r, results="asis"}
+plot_dist(rnorm(100000, 100, 25))
+```
+
+## Bernoulli
+
+```{r}
+plot_dist(rbinom(100000, 1, 0.7), discrete=T)
+```
+
+## Binomial
+
+```{r}
+plot_dist(rbinom(100000, 10, 0.5), discrete=T)
+```
+
+## Beta
+
+```{r}
+plot_dist(rbeta(100000, 2, 6))
+```
+
+## Poison
+
+```{r}
+plot_dist(rpois(100000, 3), discrete=T)
+```
+
+## Gamma
+
+```{r}
+plot_dist(rgamma(100000, 5, 2))
+```
+
+## attend_rate
+
+```{r}
+plot_dist(df$attend_rate)
+```
+
+## farms
+
+```{r}
+plot_dist(df$farms, discrete = T)
+```
+
+# Simulating Covariation
+
+### Simulating from aggregate parameters
+
+```{r}
+r <- 0.6*sqrt(15)*sqrt(10)
+
+df <- mvrnorm(analytic$enrollment_cnt[1], 
+              mu = c(analytic$attend_rate_pct[1], 0),
+              Sigma=matrix(c(15, r, r, 10), 2, 2)) %>% data.frame
+
+colnames(df) <- c("attend_rate", "relative_income")
+
+df$stid <- 1:analytic$enrollment_cnt[1]
+
+df <- arrange(df, relative_income)
+
+df$farms <- rep(c(1, 0), 
+                c(
+                  round(analytic$enrollment_cnt[1]*analytic$farms_pct[1]/100),
+                  analytic$enrollment_cnt[1] - round(analytic$enrollment_cnt[1]*analytic$farms_pct[1]/100)
+                  )
+)
+
+df <- df %>% dplyr::select(stid, attend_rate, farms) %>% arrange(stid)
+```
+
+### Simulating from vectors of aggregate parameters
+
+More complicated!
+

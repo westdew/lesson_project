@@ -44,12 +44,13 @@ mdse_special_services <- read.csvX("source/Special_Services_2019.csv", stringsAs
 # - schid (int)
 # - schname (chr)
 # - schtype (chr)
+# - attend_rate_pct (num)
 # - chronic_absentee_pct (num)
 # - mcap_ela10_proficient_pct (num)
 # - mcap_algebra_proficient_pct (num)
 # - star_rating (int)
 # - points_earned (int)
-# - farms_per (num)
+# - enrollment_cnt (int)
 # Observations: High schools in Baltimore City (not special education or alternative schools)
 
 ### Munge source datasets
@@ -75,14 +76,14 @@ mdse_report_card <- mdse_report_card %>%
 ## Attendance
 
 mdse_attendance <- mdse_attendance %>%
-  rename(schid = School.Number, chronic_absentee_pct = Chronic.Absentee.Pct) %>%
+  rename(schid = School.Number, chronic_absentee_pct = Chronic.Absentee.Pct, attend_rate_pct = Attend.Rate.Pct) %>%
   filter(
     LSS.Number == 30, # Baltimore City
     schid != "A", # not aggregate
     School.Type == "High" # high school
   ) %>% 
   mutate(schid = as.integer(schid)) %>%
-  select(schid, chronic_absentee_pct)
+  select(schid, chronic_absentee_pct, attend_rate_pct)
 
 ## MCAP
 
@@ -101,14 +102,14 @@ mdse_mcap <- mdse_mcap %>%
 ## Special Services
 
 mdse_special_services <- mdse_special_services %>%
-  rename(schid = School.Number, farms_per = FARMS.Pct) %>%
+  rename(schid = School.Number, farms_pct = FARMS.Pct, enrollment_cnt = Enrollment.Cnt) %>%
   filter(
     LSS.Number == 30, # Baltimore City
     schid != "A", # not aggregate
     School.Type == "High" # high school
   ) %>%
-  mutate(schid = as.integer(schid)) %>%
-  select(schid, farms_per)
+  mutate(schid = as.integer(schid), enrollment_cnt = as.integer(enrollment_cnt)) %>%
+  select(schid, farms_pct, enrollment_cnt)
 
 ### Merge source datasets into final dataset
 
@@ -119,6 +120,19 @@ analytic <- mdse_schools %>%
   left_join(mdse_special_services, by="schid")
 
 analytic <- filter(analytic, !(schid %in% c(177, 301, 307, 884))) # remove special education and alternative schools
+
+analytic <- mutate_at(analytic, vars(-schid, -schname, -schtype, -star_rating, -points_earned), function(x) {
+  x %>%
+    ifelse(. == "<= 5.0",
+           round(runif(nrow(analytic), 0, 5), 1),
+           .
+    ) %>%
+    ifelse(. == ">= 95.0",
+           round(runif(nrow(analytic), 95, 100), 1),
+           .
+    ) %>%
+    as.numeric
+})
 
 ### Save final dataset
 save(analytic, file="data/analytic.RData")
